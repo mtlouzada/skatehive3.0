@@ -198,6 +198,13 @@ export default function SkatersContent() {
             Discover skateboarders from around the world. Browse by country and city,
             connect with the global skate community.
           </Text>
+          <Text fontSize="sm" color="gray.500" maxW="2xl">
+            Want to turn those locations into session ideas? Explore the {" "}
+            <ChakraLink as={NextLink} href="/map" color="primary" fontWeight="semibold">
+              Skatehive skate spot map
+            </ChakraLink>{" "}
+            to find skateparks, street spots, and DIY spots near the cities your crew rides in.
+          </Text>
           <HStack spacing={3} flexWrap="wrap" justify="center">
             <Badge colorScheme="green" fontSize="sm" px={3} py={1}>
               {skaters.length} Active Skaters
