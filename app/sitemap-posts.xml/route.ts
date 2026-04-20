@@ -6,13 +6,12 @@ const BRIDGE_PAGE_SIZE = 20;
 const SNAP_API_PAGE_SIZE = 50;
 const MAX_SNAP_PAGES = 100;
 const MAX_COMMUNITY_POSTS = 500;
-const GLOBAL_SKATE_TAGS = [
-  'skateboarding', 'skateboard', 'skate', 'skatelife',
-  'skating', 'skatepark', 'streetskating', 'sk8',
-  'skatevideo', 'kickflip', 'longboard', 'skateshop',
-  'skatetricks', 'skater', 'skateclips', 'cruiser',
-];
-const MAX_POSTS_PER_TAG = 100;
+const COMMUNITY_TAG_ALLOWLIST = new Set([
+  'intoskate',
+  HIVE_CONFIG.COMMUNITY_TAG?.toLowerCase(),
+].filter(Boolean));
+const TAG_SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,48}$/;
+const MIN_TAG_POSTS_FOR_SITEMAP = 2;
 
 export const revalidate = 3600;
 
@@ -117,29 +116,23 @@ async function fetchAllSnaps(): Promise<FeedSnap[]> {
   return snaps;
 }
 
-async function fetchGlobalSkatePosts(): Promise<HivePost[]> {
-  const allPosts: HivePost[] = [];
-  const seen = new Set<string>();
+function extractCommunityTags(post: HivePost): string[] {
+  try {
+    let meta = post.json_metadata;
+    if (typeof meta === 'string') meta = JSON.parse(meta);
+    if (!Array.isArray(meta?.tags)) return [];
 
-  for (let i = 0; i < GLOBAL_SKATE_TAGS.length; i += 4) {
-    const batch = GLOBAL_SKATE_TAGS.slice(i, i + 4);
-    const results = await Promise.allSettled(
-      batch.map(tag => fetchRankedPosts('created', tag, MAX_POSTS_PER_TAG))
-    );
-
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        for (const post of result.value) {
-          if (!post?.author || !post?.permlink) continue;
-          const key = `${post.author}/${post.permlink}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          allPosts.push(post);
-        }
-      }
-    }
+    return meta.tags
+      .filter((tag: unknown): tag is string => typeof tag === 'string')
+      .map((tag: string) => tag.toLowerCase().replace(/^#/, '').trim())
+      .filter((tag: string) => TAG_SLUG_REGEX.test(tag));
+  } catch {
+    return [];
   }
-  return allPosts;
+}
+
+function isCommunityRelevantTag(tag: string): boolean {
+  return COMMUNITY_TAG_ALLOWLIST.has(tag) || tag.startsWith('skate');
 }
 
 export async function GET() {
@@ -163,20 +156,14 @@ export async function GET() {
     const tag = HIVE_CONFIG.COMMUNITY_TAG;
     if (!tag) throw new Error('Missing Hive community tag');
 
-    const [communityPosts, feedSnaps, globalPosts] = await Promise.all([
+    const [communityPosts, feedSnaps] = await Promise.all([
       fetchRankedPosts('created', tag, MAX_COMMUNITY_POSTS),
       fetchAllSnaps(),
-      fetchGlobalSkatePosts(),
     ]);
 
     for (const post of communityPosts) {
       if (!post?.author || !post?.permlink) continue;
       addUrl(`${baseUrl}/post/${post.author}/${post.permlink}`, safeDate(post.created || post.last_update).toISOString(), 'monthly', calculatePostPriority(post));
-    }
-
-    for (const post of globalPosts) {
-      if (!post?.author || !post?.permlink) continue;
-      addUrl(`${baseUrl}/post/${post.author}/${post.permlink}`, safeDate(post.created || post.last_update).toISOString(), 'monthly', Math.max(0.3, calculatePostPriority(post) - 0.1));
     }
 
     for (const snap of feedSnaps) {
@@ -185,30 +172,23 @@ export async function GET() {
     }
 
     const authors = new Set<string>();
-    for (const post of [...communityPosts, ...globalPosts]) if (post?.author) authors.add(post.author);
+    for (const post of communityPosts) if (post?.author) authors.add(post.author);
     for (const snap of feedSnaps) if (snap?.author) authors.add(snap.author);
     for (const author of authors) {
       addUrl(`${baseUrl}/user/${author}`, new Date().toISOString(), 'weekly', 0.4);
     }
 
-    const tags = new Set<string>();
-    for (const post of [...communityPosts, ...globalPosts]) {
-      try {
-        let meta = post.json_metadata;
-        if (typeof meta === 'string') meta = JSON.parse(meta);
-        if (Array.isArray(meta?.tags)) {
-          for (const t of meta.tags) {
-            if (typeof t === 'string' && t.length > 1 && t.length < 50) {
-              const cleaned = t.toLowerCase().replace(/^#/, '');
-              if (cleaned && /^[a-z0-9]/.test(cleaned)) tags.add(cleaned);
-            }
-          }
-        }
-      } catch { /* skip */ }
+    const tagCounts = new Map<string, number>();
+    for (const post of communityPosts) {
+      for (const tag of extractCommunityTags(post)) {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      }
     }
-    for (const t of GLOBAL_SKATE_TAGS) tags.add(t);
-    for (const t of tags) {
-      addUrl(`${baseUrl}/blog/tag/${t}`, new Date().toISOString(), 'weekly', 0.3);
+
+    for (const [tagName, count] of tagCounts.entries()) {
+      if (count < MIN_TAG_POSTS_FOR_SITEMAP) continue;
+      if (!isCommunityRelevantTag(tagName)) continue;
+      addUrl(`${baseUrl}/blog/tag/${tagName}`, new Date().toISOString(), 'weekly', 0.3);
     }
 
   } catch (error) {

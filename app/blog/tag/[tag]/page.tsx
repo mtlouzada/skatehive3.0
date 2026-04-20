@@ -46,6 +46,8 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   const decodedTag = decodeURIComponent(tag).replace(/^#/, '');
   const title = formatTagTitle(decodedTag);
   const tagUrl = `${BASE_URL}/blog/tag/${decodedTag}`;
+  const posts = await fetchPostsByTag(decodedTag);
+  const shouldIndex = posts.length > 0;
 
   return {
     title: `${title} - Skateboarding Posts`,
@@ -73,6 +75,14 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
       title: `${title} - Skatehive`,
       description: `Skateboarding posts tagged "${decodedTag}" on Skatehive.`,
       images: ["/ogimage.png"],
+    },
+    robots: {
+      index: shouldIndex,
+      follow: shouldIndex,
+      googleBot: {
+        index: shouldIndex,
+        follow: shouldIndex,
+      },
     },
     other: {
       "fc:frame": JSON.stringify({
