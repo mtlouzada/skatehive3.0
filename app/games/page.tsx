@@ -7,9 +7,9 @@ const GamesGallery = dynamic(() => import("./GamesGallery"));
 const BASE_URL = "https://skatehive.app";
 
 export const metadata: Metadata = {
-  title: "Skate Games — Play Free Skateboarding Games Online | Skatehive",
+  title: "Free Skateboarding Games Online, Play in Your Browser | SkateHive",
   description:
-    "Play free skateboarding games built by the SkateHive community. Browser-based skate games like Quest for Stoken and Lougnar — no download needed.",
+    "Play free skateboarding games online with SkateHive. Jump into Quest for Stoken and Lougnar instantly in your browser, no download or signup required.",
   keywords: [
     "skateboarding games",
     "skate games online",
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     canonical: `${BASE_URL}/games`,
   },
   openGraph: {
-    title: "Skate Games — Play Free Skateboarding Games Online",
+    title: "Free Skateboarding Games Online | SkateHive",
     description:
-      "Play free skateboarding games built by the SkateHive community. No download needed — play in your browser.",
+      "Play Quest for Stoken and Lougnar free in your browser. No download, no signup, just click and skate.",
     type: "website",
     url: `${BASE_URL}/games`,
     siteName: "SkateHive",
@@ -44,9 +44,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Skate Games — Play Free Online | SkateHive",
+    title: "Play Free Skateboarding Games Online | SkateHive",
     description:
-      "Free browser-based skateboarding games built by skaters, for skaters. No download required.",
+      "Free browser skate games by the SkateHive community. Play instantly, no download needed.",
     images: [`${BASE_URL}/images/qfs-ogimage.png`],
   },
   other: {
@@ -71,20 +71,67 @@ export const metadata: Metadata = {
 function GamesJsonLd() {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "CollectionPage",
-    name: "SkateHive Games — Free Skateboarding Games",
-    description:
-      "A collection of free browser-based skateboarding games built by the SkateHive community.",
-    url: `${BASE_URL}/games`,
-    publisher: {
-      "@type": "Organization",
-      name: "SkateHive",
-      url: BASE_URL,
-    },
-    hasPart: [
+    "@graph": [
       {
-        "@type": "VideoGame",
-        name: "Quest for Stoken",
+        "@type": "CollectionPage",
+        "@id": `${BASE_URL}/games#webpage`,
+        name: "SkateHive Games",
+        description:
+          "Play free skateboarding games online in your browser, including Quest for Stoken and Lougnar.",
+        url: `${BASE_URL}/games`,
+        isPartOf: {
+          "@type": "WebSite",
+          name: "SkateHive",
+          url: BASE_URL,
+        },
+        about: {
+          "@type": "Thing",
+          name: "Skateboarding games",
+        },
+        breadcrumb: {
+          "@id": `${BASE_URL}/games#breadcrumb`,
+        },
+        mainEntity: {
+          "@id": `${BASE_URL}/games#itemlist`,
+        },
+        publisher: {
+          "@type": "Organization",
+          name: "SkateHive",
+          url: BASE_URL,
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${BASE_URL}/games#breadcrumb`,
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: BASE_URL,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Games",
+            item: `${BASE_URL}/games`,
+          },
+        ],
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${BASE_URL}/games#itemlist`,
+        name: "Free Skateboarding Games",
+        itemListOrder: "https://schema.org/ItemListOrderAscending",
+        numberOfItems: 2,
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            url: `${BASE_URL}/games/quest-for-stoken`,
+            item: {
+              "@type": "VideoGame",
+              name: "Quest for Stoken",
         description:
           "The OG SkateHive game. Control your skater through challenging levels and collect STOKEN tokens.",
         url: `${BASE_URL}/games/quest-for-stoken`,
@@ -101,11 +148,16 @@ function GamesJsonLd() {
           "@type": "Person",
           name: "webgnar",
         },
-        image: `${BASE_URL}/images/qfs-ogimage.png`,
-      },
-      {
-        "@type": "VideoGame",
-        name: "Lougnar",
+              image: `${BASE_URL}/images/qfs-ogimage.png`,
+            },
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            url: `${BASE_URL}/games/lougnar`,
+            item: {
+              "@type": "VideoGame",
+              name: "Lougnar",
         description:
           "The newest skateboarding game from SkateHive. A fresh take on skate gaming built with Excalibur.js.",
         url: `${BASE_URL}/games/lougnar`,
@@ -122,7 +174,10 @@ function GamesJsonLd() {
           "@type": "Person",
           name: "webgnar",
         },
-        image: `${BASE_URL}/images/lougnar-thumb.jpg`,
+              image: `${BASE_URL}/images/lougnar-thumb.jpg`,
+            },
+          },
+        ],
       },
     ],
   };
@@ -154,13 +209,13 @@ export default function GamesPage() {
           borderWidth: 0,
         }}
       >
-        <h1>Skate Games — Play Free Skateboarding Games Online</h1>
-        <p>Play free browser-based skateboarding games built by the SkateHive community. No download needed.</p>
+        <h1>Free Skateboarding Games Online</h1>
+        <p>Play free skateboarding games online from the SkateHive community. Start instantly in your browser, no download or signup needed.</p>
         <h2>Quest for Stoken</h2>
         <p>The OG SkateHive game. Control your skater through challenging levels, collect STOKEN tokens, and compete for high scores. Built by webgnar.</p>
         <h2>Lougnar</h2>
         <p>The newest skateboarding game from SkateHive. A fresh take on skate gaming built with Excalibur.js. Click to jump and dodge obstacles.</p>
-        <p>All games are free to play in your browser — no downloads, no signups. Just click and skate.</p>
+        <p>Discover browser skate games made by skaters, including arcade and action titles you can play right away. All games are free, fast to load, and easy to jump into.</p>
       </div>
       <GamesGallery />
     </>

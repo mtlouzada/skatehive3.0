@@ -39,7 +39,7 @@ const GAMES: GameCartridge[] = [
     slug: "quest-for-stoken",
     title: "Quest for Stoken",
     description:
-      "The OG skatehive game. Control your skater through challenging levels and collect STOKEN.",
+      "The OG SkateHive browser skate game. Ride through levels, dodge hazards, and collect STOKEN.",
     thumbnail: "/images/qfs-ogimage.png",
     url: "/games/quest-for-stoken",
     developer: "webgnar",
@@ -49,7 +49,7 @@ const GAMES: GameCartridge[] = [
     slug: "lougnar",
     title: "Lougnar",
     description:
-      "The newest skatehive game by webgnar. A fresh take on skate gaming with Excalibur.js.",
+      "A fast, one-button skate action game by webgnar built with Excalibur.js.",
     thumbnail: "/images/lougnar-thumb.jpg",
     url: "/games/lougnar",
     developer: "webgnar",
@@ -173,11 +173,10 @@ export default function GamesGallery() {
           color="primary"
           letterSpacing="wider"
         >
-          🎮 skate games
+          🎮 free skate games
         </Heading>
-        <Text color="gray.400" fontSize={{ base: "sm", md: "md" }} maxW="600px">
-          Free skateboarding games built by the community. Pick a cartridge and
-          shred.
+        <Text color="gray.400" fontSize={{ base: "sm", md: "md" }} maxW="680px">
+          Play free skateboarding games online from the SkateHive community. Pick a cartridge and jump straight into the session, no download required.
         </Text>
       </VStack>
 
@@ -206,24 +205,19 @@ export default function GamesGallery() {
         lineHeight="1.7"
       >
         <Heading as="h2" fontSize="lg" color="primary" mb={3}>
-          Free Skateboarding Games — Play Online
+          Play free skateboarding games online
         </Heading>
         <Text mb={3}>
-          SkateHive brings you free browser-based skateboarding games built by
-          skaters, for skaters. No download required — just pick a cartridge
-          and start playing.
+          SkateHive brings together free browser skate games made by skaters, for skaters. If you are looking for skateboarding games online, you can start playing instantly here without installs, accounts, or app-store downloads.
         </Text>
         <Text mb={3}>
-          <strong>Quest for Stoken</strong> is the OG SkateHive game, a
-          platformer-style skateboarding adventure where you control your skater
-          through challenging levels, land tricks, and collect STOKEN tokens.
-          Perfect for fans of arcade skate games and retro platformers.
+          <strong>Quest for Stoken</strong> is the original SkateHive game, built for players who like arcade-style platformers with a skate flavor. Guide your skater through levels, avoid obstacles, and collect STOKEN as you push for a better run.
+        </Text>
+        <Text mb={3}>
+          <strong>Lougnar</strong> is a newer, faster one-button experience that leans into quick reactions and replayability. It gives the page a broader search fit for players looking for browser skate games, indie skateboarding games, or quick skate games to play at work or on mobile.
         </Text>
         <Text>
-          <strong>Lougnar</strong> is the newest addition — a fresh take on
-          skateboarding games built with Excalibur.js. Both games are
-          completely free, run in your browser (HTML5), and work on any device.
-          No app store, no downloads, just instant skateboarding action.
+          Both titles are free to play, run in the browser with HTML5 tech, and load fast on desktop and mobile. That makes SkateHive Games a strong destination for anyone searching for free skateboarding games online without the friction of a download.
         </Text>
       </Box>
 
