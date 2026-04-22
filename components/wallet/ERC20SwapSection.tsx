@@ -681,8 +681,8 @@ export default function ERC20SwapSection({ showFeeOption = false, compact = fals
         const hash = await sendTransactionAsync({
           to: tx.to as `0x${string}`,
           data: tx.data as `0x${string}`,
-          value: tx.value ? BigInt(tx.value) : undefined,
-          gas: tx.gas ? BigInt(tx.gas) : undefined,
+          value: BigInt(tx.value ?? 0),
+          gas: tx.gas != null ? BigInt(tx.gas) : undefined,
           chainId,
         });
 
