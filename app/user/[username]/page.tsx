@@ -157,6 +157,14 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
       return {
         title: `${username} | Skatehive Profile`,
         description: `View ${username}'s profile on Skatehive.`,
+        robots: {
+          index: false,
+          follow: false,
+          googleBot: {
+            index: false,
+            follow: false,
+          },
+        },
       };
     }
     const profileUrl = `${DOMAIN_URL}/user/${username}`;
@@ -224,6 +232,14 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
     return {
       title: `${username} | Skatehive Profile`,
       description: `View ${username}'s profile on Skatehive.`,
+      robots: {
+        index: false,
+        follow: false,
+        googleBot: {
+          index: false,
+          follow: false,
+        },
+      },
     };
   }
 }

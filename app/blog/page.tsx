@@ -5,6 +5,7 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
+  Link as ChakraLink,
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { Discussion } from "@hiveio/dhive";
@@ -14,6 +15,7 @@ import { getHiveTagForQuery } from "@/lib/hive/tag-utils";
 import TopBar from "@/components/blog/TopBar";
 import PostInfiniteScroll from "@/components/blog/PostInfiniteScroll";
 import { useSearchParams, useRouter } from "next/navigation";
+import NextLink from "next/link";
 import JoinSkatehiveBanner from "@/components/blog/JoinSkatehiveBanner";
 import PostGrid from "@/components/blog/PostGrid";
 import MagazineModal from "@/components/shared/MagazineModal";
@@ -381,6 +383,16 @@ function BlogContent() {
             router.replace(`/blog?${params.toString()}`);
           }}
         />
+        <Alert status="info" mb={4} borderRadius="md" bg="rgba(20,20,20,0.45)">
+          <AlertIcon />
+          <AlertDescription>
+            Reading a post about a city, crew, or trip? Cross-check it with the {" "}
+            <ChakraLink as={NextLink} href="/map" color="primary" fontWeight="semibold">
+              Skatehive skate spot map
+            </ChakraLink>{" "}
+            to find nearby skateparks, street spots, and DIY spots.
+          </AlertDescription>
+        </Alert>
         {isGoatLoading && (query === "goat" || query === "highest_paid") && (
           <Box textAlign="center" color="primary" py={4} fontWeight="bold">
             {query === "goat" ? t('blog.scanningGoat') : t('blog.loading')}

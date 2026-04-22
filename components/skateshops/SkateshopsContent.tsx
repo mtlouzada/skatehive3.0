@@ -116,6 +116,13 @@ export default function SkateshopsContent() {
             Browse shops shared by the Skatehive community, from iconic spots like <strong>Bless Skate Shop</strong> to
             hidden gems in your city. Find gear, watch videos, and support the businesses that support skateboarding.
           </Text>
+          <Text fontSize="sm" color="gray.300" mt={3}>
+            Planning a stop after the shop visit? Open the {" "}
+            <ChakraLink as={NextLink} href="/map" color="primary" fontWeight="semibold">
+              Skatehive spot map
+            </ChakraLink>{" "}
+            to discover skateparks, street spots, and DIY spots nearby.
+          </Text>
         </Box>
 
         {/* Posts Grid */}

@@ -7,8 +7,11 @@ import {
   Skeleton,
   SkeletonCircle,
   Spinner,
+  Text,
+  Link as ChakraLink,
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect, useCallback } from "react";
+import NextLink from "next/link";
 import { Discussion } from "@hiveio/dhive";
 import { findPosts } from "@/lib/hive/client-functions";
 import PostGrid from "@/components/blog/PostGrid";
@@ -129,6 +132,22 @@ export default function RightSideBar() {
       }}
     >
       <CommunityTotalPayout />
+      <Box
+        mt={3}
+        p={4}
+        borderWidth="1px"
+        borderColor="whiteAlpha.200"
+        borderRadius="lg"
+        bg="rgba(20,20,20,0.45)"
+      >
+        <Text fontSize="sm" color="gray.300">
+          Looking for your next session? Check the {" "}
+          <ChakraLink as={NextLink} href="/map" color="primary" fontWeight="semibold">
+            Skatehive spot map
+          </ChakraLink>{" "}
+          for skateparks, street spots, and DIY spots shared by the community.
+        </Text>
+      </Box>
       <Divider my={2} borderColor="muted" />
       {allPosts.length > 0 ? (
         <PostGrid posts={allPosts} columns={1} />
