@@ -48,6 +48,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
   const [pendingSteps] = useState<Step[]>(() => {
     if (!user) return [];
     return STEPS.filter((s) => {
+      if (s === "photo" && user.avatar_url) return false;
       const flag =
         s === "photo" ? ONBOARDING_FLAG_PHOTO :
         s === "bio"   ? ONBOARDING_FLAG_BIO :
@@ -62,6 +63,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
 
   // Tracks which flags were actually completed (not skipped) this session
   const completedFlagsRef = useRef(0);
+  const photoFlagSyncedRef = useRef(false);
 
   // ── Photo state ───────────────────────────────────────────────────────────
   const [avatarPreview, setAvatarPreview] = useState<string>(user?.avatar_url ?? "");
@@ -92,7 +94,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   // Fire-and-forget PATCH — navigation never waits for the server response
-  function saveToServer(payload: Record<string, unknown>, errorLabel?: string) {
+  const saveToServer = React.useCallback((payload: Record<string, unknown>, errorLabel?: string) => {
     fetch("/api/userbase/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -102,7 +104,16 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
         toast({ title: errorLabel, status: "error", duration: 3000 });
       }
     });
-  }
+  }, [toast]);
+
+  // Silently mark photo flag if user already has an avatar but the bit isn't set yet
+  useEffect(() => {
+    if (photoFlagSyncedRef.current) return;
+    if (user?.avatar_url && !((user.onboarding_step ?? 0) & ONBOARDING_FLAG_PHOTO)) {
+      photoFlagSyncedRef.current = true;
+      saveToServer({ onboarding_step_flag: ONBOARDING_FLAG_PHOTO });
+    }
+  }, [user, saveToServer]);
 
   function advance() {
     if (stepIndex + 1 < pendingSteps.length) {
@@ -296,14 +307,10 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
           </Text>
 
           <VStack spacing={1} align="start" w="full" px={2}>
-            {[
-              { icon: FiCamera,   label: "Add a profile photo" },
-              { icon: FiFileText, label: "Write a short bio" },
-              { icon: FiEdit3,    label: "Post your intro to the feed" },
-            ].map(({ icon, label }) => (
-              <HStack key={label} spacing={2}>
-                <Icon as={icon} boxSize={3.5} color="dim" />
-                <Text fontSize="xs" color="dim" fontFamily="mono">{label}</Text>
+            {pendingSteps.map((s) => (
+              <HStack key={s} spacing={2}>
+                <Icon as={stepIcons[s]} boxSize={3.5} color="dim" />
+                <Text fontSize="xs" color="dim" fontFamily="mono">{stepLabels[s]}</Text>
               </HStack>
             ))}
           </VStack>
