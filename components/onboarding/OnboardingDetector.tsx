@@ -102,7 +102,8 @@ export default function OnboardingDetector() {
 
   // Only show onboarding for accounts created after the feature launch date.
   // Existing users are excluded without any database migration.
-  if (new Date(user.created_at) < ONBOARDING_LAUNCH_DATE) return null;
+  const createdAt = new Date(user.created_at);
+  if (isNaN(createdAt.getTime()) || createdAt < ONBOARDING_LAUNCH_DATE) return null;
 
   const step = user.onboarding_step ?? 0;
   const hasCustomAvatar = !!user.avatar_url && !user.avatar_url.includes(DICEBEAR_URL_PATTERN);

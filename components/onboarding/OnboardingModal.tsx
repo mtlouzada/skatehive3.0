@@ -263,11 +263,11 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
       saveToServer({ onboarding_step_flag: ONBOARDING_FLAG_POST });
       completedFlagsRef.current |= ONBOARDING_FLAG_POST;
       toast({ title: "Posted to the feed! Welcome 🛹", status: "success", duration: 4000 });
+      advance();
     } catch (e: any) {
       toast({ title: e?.message ?? "Could not post", status: "error", duration: 4000 });
     } finally {
       setIsPosting(false);
-      advance();
     }
   }
 
