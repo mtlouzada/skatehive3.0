@@ -28,9 +28,13 @@ import {
   ONBOARDING_FLAG_BIO,
   ONBOARDING_FLAG_POST,
   ONBOARDING_ALL_DONE,
+  DICEBEAR_URL_PATTERN,
 } from "./OnboardingModal";
 
 const OnboardingModal = dynamic(() => import("./OnboardingModal"), { ssr: false });
+
+// Accounts created before this date are excluded from onboarding.
+const ONBOARDING_LAUNCH_DATE = new Date("2026-04-22");
 
 // sessionStorage keys
 const SS_SEEN = "onboarding_modal_seen"; // set after first auto-open
@@ -41,7 +45,7 @@ function isLocallyDone() {
 }
 
 export default function OnboardingDetector() {
-  const { user, isLoading } = useUserbaseAuth();
+  const { user } = useUserbaseAuth();
   const theme = useTheme();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,7 +54,7 @@ export default function OnboardingDetector() {
 
   // ── Auto-open once per browser session for new users ─────────────────────
   useEffect(() => {
-    if (isLoading || !user) return;
+    if (!user) return;
     if (hasAutoOpened.current) return;
 
     const isDone = ((user.onboarding_step ?? 0) & ONBOARDING_ALL_DONE) === ONBOARDING_ALL_DONE || isLocallyDone();
@@ -70,7 +74,7 @@ export default function OnboardingDetector() {
     }
 
     hasAutoOpened.current = true;
-  }, [user, isLoading]);
+  }, [user]);
 
   // ── Clean up SS_DONE once the server confirms onboarding_step === 7 ───────
   useEffect(() => {
@@ -91,17 +95,32 @@ export default function OnboardingDetector() {
   }, [user]);
 
   // ── Nothing to show ───────────────────────────────────────────────────────
-  if (!user || isLoading) return null;
+  // isLoading intentionally excluded: background refreshes (focus/visibility
+  // events) set isLoading=true while user stays non-null, which would unmount
+  // the modal mid-flow and reset its state.
+  if (!user) return null;
+
+  // Only show onboarding for accounts created after the feature launch date.
+  // Existing users are excluded without any database migration.
+  if (new Date(user.created_at) < ONBOARDING_LAUNCH_DATE) return null;
 
   const step = user.onboarding_step ?? 0;
-  const isDone = (step & ONBOARDING_ALL_DONE) === ONBOARDING_ALL_DONE || isLocallyDone();
+  const hasCustomAvatar = !!user.avatar_url && !user.avatar_url.includes(DICEBEAR_URL_PATTERN);
+  const hasBio = !!user.bio?.trim();
+  const effectiveStep = (hasCustomAvatar ? ONBOARDING_FLAG_PHOTO : 0)
+    | (hasBio ? ONBOARDING_FLAG_BIO : 0)
+    | step;
+  const isDone = (effectiveStep & ONBOARDING_ALL_DONE) === ONBOARDING_ALL_DONE || isLocallyDone();
   if (isDone) return null;
 
   const items = [
-    { flag: ONBOARDING_FLAG_PHOTO, icon: FiCamera,   label: "Add a photo" },
-    { flag: ONBOARDING_FLAG_BIO,   icon: FiFileText,  label: "Write your bio" },
-    { flag: ONBOARDING_FLAG_POST,  icon: FiEdit3,     label: "Intro post" },
+    ...(!hasCustomAvatar ? [{ flag: ONBOARDING_FLAG_PHOTO, icon: FiCamera, label: "Add a photo" }] : []),
+    ...(!hasBio ? [{ flag: ONBOARDING_FLAG_BIO, icon: FiFileText, label: "Write your bio" }] : []),
+    { flag: ONBOARDING_FLAG_POST, icon: FiEdit3, label: "Intro post" },
   ];
+
+  const pendingItems = items.filter(({ flag }) => !(effectiveStep & flag));
+  const ctaLabel = pendingItems.length === 1 ? pendingItems[0].label : "finish setup";
 
   const bgColor = theme.colors.panel || theme.colors.background;
   const borderColor = theme.colors.border;
@@ -159,7 +178,7 @@ export default function OnboardingDetector() {
           {/* Steps checklist */}
           <VStack align="stretch" spacing={0} px={3} py={2}>
             {items.map(({ flag, icon, label }) => {
-              const done = Boolean(step & flag);
+              const done = Boolean(effectiveStep & flag);
               return (
                 <HStack key={flag} spacing={2} py={1}>
                   <Icon
@@ -196,7 +215,7 @@ export default function OnboardingDetector() {
               fontFamily="mono"
               onClick={() => setIsModalOpen(true)}
             >
-              finish setup
+              {ctaLabel}
             </Button>
           </Box>
         </Box>

@@ -28,6 +28,9 @@ export const ONBOARDING_FLAG_BIO   = 2; // bit 1
 export const ONBOARDING_FLAG_POST  = 4; // bit 2
 export const ONBOARDING_ALL_DONE   = 7;
 
+// Default avatar generated on signup — not a custom upload
+export const DICEBEAR_URL_PATTERN = "dicebear.com";
+
 const STEPS = ["photo", "bio", "post"] as const;
 type Step = (typeof STEPS)[number];
 
@@ -44,11 +47,14 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
   // user.onboarding_step changing mid-flow when refresh() is called.
   // Lazy useState initializer runs once and never re-evaluates (user is
   // guaranteed non-null here because OnboardingDetector guards with
-  // `if (!user || isLoading) return null` before mounting this component).
+  // `if (!user) return null` before mounting this component).
   const [pendingSteps] = useState<Step[]>(() => {
     if (!user) return [];
+    const hasCustomAvatar = !!user.avatar_url && !user.avatar_url.includes(DICEBEAR_URL_PATTERN);
+    const hasBio = !!user.bio?.trim();
     return STEPS.filter((s) => {
-      if (s === "photo" && user.avatar_url) return false;
+      if (s === "photo" && hasCustomAvatar) return false;
+      if (s === "bio" && hasBio) return false;
       const flag =
         s === "photo" ? ONBOARDING_FLAG_PHOTO :
         s === "bio"   ? ONBOARDING_FLAG_BIO :
@@ -64,6 +70,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
   // Tracks which flags were actually completed (not skipped) this session
   const completedFlagsRef = useRef(0);
   const photoFlagSyncedRef = useRef(false);
+  const bioFlagSyncedRef = useRef(false);
 
   // ── Photo state ───────────────────────────────────────────────────────────
   const [avatarPreview, setAvatarPreview] = useState<string>(user?.avatar_url ?? "");
@@ -106,13 +113,21 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
     });
   }, [toast]);
 
-  // Silently mark photo flag if user already has an avatar but the bit isn't set yet
+  // Silently sync bitmask flags for data that already exists outside onboarding
   useEffect(() => {
-    if (photoFlagSyncedRef.current) return;
-    if (user?.avatar_url && !((user.onboarding_step ?? 0) & ONBOARDING_FLAG_PHOTO)) {
+    const currentStep = user?.onboarding_step ?? 0;
+    let flagsToSync = 0;
+    const hasCustomAvatar = !!user?.avatar_url && !user.avatar_url.includes(DICEBEAR_URL_PATTERN);
+    if (!photoFlagSyncedRef.current && hasCustomAvatar && !(currentStep & ONBOARDING_FLAG_PHOTO)) {
       photoFlagSyncedRef.current = true;
-      saveToServer({ onboarding_step_flag: ONBOARDING_FLAG_PHOTO });
+      flagsToSync |= ONBOARDING_FLAG_PHOTO;
     }
+    const hasBio = !!user?.bio?.trim();
+    if (!bioFlagSyncedRef.current && hasBio && !(currentStep & ONBOARDING_FLAG_BIO)) {
+      bioFlagSyncedRef.current = true;
+      flagsToSync |= ONBOARDING_FLAG_BIO;
+    }
+    if (flagsToSync) saveToServer({ onboarding_step_flag: flagsToSync });
   }, [user, saveToServer]);
 
   function advance() {
@@ -282,6 +297,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
       title={showWelcome ? "welcome.sh" : `onboarding.sh — step ${stepIndex + 1}/${totalSteps}`}
       size="sm"
       closeOnOverlayClick={false}
+      windowId="onboarding-modal"
     >
       {/* ── WELCOME SCREEN ───────────────────────────────────────────────── */}
       {showWelcome ? (
