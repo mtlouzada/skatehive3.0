@@ -270,11 +270,28 @@ Endpoints: `GET /api/userbase/notifications` (list + `unread_count`),
 
 ---
 
+## Every road to @skatehive goes through the queue
+
+There are two ways to submit, and both enqueue:
+
+| Entry point | Who | Override it grants |
+|---|---|---|
+| Composer toggle → `/api/instagram/post` | the author | — |
+| Snap ⋯ menu → `/api/instagram/force-post` | `ADMIN_USERS` | skips the author's HP gate and caps |
+
+The moderator route used to publish straight to Meta. That made it a second
+door onto the shared account: a snap sent that way never appeared in the
+portal's queue and no curator ever saw it — which is exactly how a video
+reached @skatehive unreviewed while the feature was thought to be live. It
+enqueues now. The "force" it still grants is skipping the author's gates, not
+skipping review.
+
+Its row is filed under the **author**, so the outcome notification reaches the
+person whose clip it is; the moderator is recorded in `requested_by_handle` and
+`payload.forced_by`.
+
 ## What did NOT change
 
-- **`/api/instagram/force-post`** still publishes immediately. That route is the
-  moderator's own hands — the curation team *is* the approval step, so making it
-  queue behind itself would be a loop.
 - **`userbase_instagram_posts`** is still the IG publication registry: dedupe,
   the per-user 24h cap and the composer preview all read it. The queue writes
   into it on a successful publish.

@@ -454,9 +454,13 @@ const Snap = React.memo(function Snap({
                   isDisabled={!igMedia.has}
                 >
                   <FaInstagram style={{ marginRight: "8px" }} />
+                  {/* Not "force post" any more: this files the snap for the
+                      curation team like any other request. The override it
+                      still grants is skipping the author's HP gate and caps,
+                      not skipping review. */}
                   {igMedia.has
-                    ? "Force post to Instagram…"
-                    : "Force post to Instagram (no media)"}
+                    ? "Send to Instagram curation…"
+                    : "Send to Instagram curation (no media)"}
                 </MenuItem>
               )}
               <ShareMenuButtons comment={discussion} />

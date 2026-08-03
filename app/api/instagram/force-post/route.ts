@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  isInstagramConfigured,
-  publishImageToInstagram,
-  publishReelToInstagram,
-  publishCarouselToInstagram,
-} from "@/lib/instagram/graph";
+import { isInstagramConfigured } from "@/lib/instagram/graph";
 import { buildInstagramCaption } from "@/lib/instagram/caption";
 import { resolveIgHandleForCaption } from "@/lib/instagram/resolveIgHandle";
 import { isServerSideAdmin, logSecurityAttempt } from "@/lib/server/adminUtils";
@@ -13,40 +8,49 @@ import {
   resolveSessionUserId,
   verifyHivePostingSignature,
 } from "@/lib/instagram/requesterAuth";
+import {
+  enqueueCrossPost,
+  findActiveQueueItem,
+  type InstagramQueuePayload,
+} from "@/lib/crosspost/queue";
+import { notifyCrossPostQueued } from "@/lib/notifications/appNotifications";
 
 /**
  * POST /api/instagram/force-post
  *
- * Moderator override for Instagram cross-posting. Unlike /api/instagram/post
+ * Moderator submission for Instagram cross-posting. Unlike /api/instagram/post
  * (where the requester IS the author and must clear the HP gate + per-user
- * cap), this route lets an allowlisted SkateHive admin force-publish ANY
- * snap to the shared @skatehive IG account — used to surface good content
- * from authors who don't yet meet the self-serve criteria.
+ * cap), this route lets an allowlisted SkateHive admin put ANY snap in front of
+ * the curation team — used to surface good content from authors who don't yet
+ * meet the self-serve criteria.
+ *
+ * It used to publish straight to Meta, which made it a second door onto the
+ * shared @skatehive account: a snap sent this way never appeared in the
+ * portal's queue and no curator ever saw it. Everything that reaches that
+ * account now goes through the same review, so this route enqueues like any
+ * other request. The name is kept because the override it grants is real —
+ * it skips the author gates, not the review.
  *
  * The authenticated requester is the MODERATOR; `hive_author`/`hive_permlink`
- * are the TARGET snap (kept for caption attribution + dedupe). The author HP
- * gate and per-user 24h cap are bypassed; Meta's own 25/account/24h ceiling
- * and the (author, permlink) dedupe still apply.
+ * are the TARGET snap. The queue row is filed under the AUTHOR (so the outcome
+ * notification reaches them, not the moderator) with the moderator recorded in
+ * `requested_by_handle` and `payload.forced_by`.
  *
  * Body:
  *   - hive_author / hive_permlink : the target snap (required)
  *   - title? / body              : caption source
  *   - tags?                      : extra hashtags
  *   - image_url? / video_url?    : publicly hosted media (≥1 required)
+ *   - media_items?               : ordered carousel items (2+ → CAROUSEL)
  *   - permalink_url              : skatehive.app URL (required)
  *   - requester?, hive_signature?, hive_public_key?, signed_at? : Keychain
  *       moderator auth (only needed when there's no userbase session cookie)
- *   - preview?: boolean          : if true, skip dedupe/DB/Meta and just
- *       return the rendered caption + media for client-side preview UI.
- *       Cookie auth still required, but no Hive signature is requested
- *       (the moderator only signs at actual-post confirm time, so a
- *       leaked signature can't be replayed after the 5-min window).
+ *   - preview?: boolean          : if true, skip dedupe/DB and just return the
+ *       rendered caption + media for client-side preview UI. Cookie auth still
+ *       required, but no Hive signature is requested (the moderator only signs
+ *       at confirm time, so a leaked signature can't be replayed after the
+ *       5-min window).
  */
-
-// Same reason as the queue's approve route: this one still publishes inline,
-// and Meta's Reel/carousel container polling runs well past the platform
-// default request ceiling.
-export const maxDuration = 300;
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -95,10 +99,6 @@ async function userIdForHiveHandle(handle: string): Promise<string | null> {
     .eq("handle", handle)
     .limit(1);
   return (data?.[0]?.user_id as string | undefined) ?? null;
-}
-
-function isCollaboratorVisibilityError(error: string | undefined) {
-  return /user not visible|collaborator|invite/i.test(error || "");
 }
 
 export async function POST(request: NextRequest) {
@@ -228,18 +228,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // --- Dedupe on (author, permlink) — same semantics as the self-serve route. ---
+  // --- Already live on Instagram → nothing to review. Preview requests skip
+  // this so they still reach the preview branch, which surfaces the state as a
+  // non-blocking warning instead. ---
   const { data: existingRows } = await supabase
     .from("userbase_instagram_posts")
-    .select("id, status, ig_media_id, ig_permalink, created_at")
+    .select("id, status, ig_media_id, ig_permalink")
     .eq("hive_author", hiveAuthor)
     .eq("hive_permlink", hivePermlink)
+    .eq("status", "published")
     .limit(1);
   const existing = existingRows?.[0];
-  // Preview requests skip these early returns so they always reach the
-  // preview branch below, which surfaces the dedupe state as a non-blocking
-  // warning (the moderator may still want to see the second attempt's caption).
-  if (!isPreview && existing && existing.status === "published") {
+  if (!isPreview && existing) {
     return NextResponse.json(
       {
         success: true,
@@ -249,18 +249,6 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
-  }
-  let existingRetryableId: string | null = null;
-  if (!isPreview && existing) {
-    const ageMs = Date.now() - new Date(existing.created_at).getTime();
-    if (existing.status === "failed" || (existing.status === "queued" && ageMs > 10 * 60 * 1000)) {
-      existingRetryableId = existing.id as string;
-    } else {
-      return NextResponse.json(
-        { error: "This snap is already being cross-posted. Try again in a minute." },
-        { status: 409 }
-      );
-    }
   }
 
   // --- Caption credits the ORIGINAL author (not the moderator). ---
@@ -309,6 +297,16 @@ export async function POST(request: NextRequest) {
         }
       : null;
 
+    // An item already waiting on a curator — the dialog turns this into
+    // "already with the curation team" and disables the button, instead of
+    // letting the moderator file a duplicate that the index would reject.
+    const queued = await findActiveQueueItem({
+      supabase,
+      target: "instagram",
+      hiveAuthor,
+      hivePermlink,
+    });
+
     return NextResponse.json({
       success: true,
       preview: true,
@@ -321,138 +319,91 @@ export async function POST(request: NextRequest) {
       default_collaborators: igHandle ? [igHandle] : [],
       target_account: "@skatehive",
       moderator: moderatorHandle,
+      // Confirming files this for the curation team; it does not publish.
+      review_required: true,
+      queue: queued
+        ? { id: queued.id, status: queued.status, created_at: queued.created_at }
+        : null,
       dedupe,
     });
   }
 
-  // user_id records WHO triggered the cross-post — here, the moderator.
-  // hive_author keeps the original author for attribution + dedupe.
-  let queuedId: string;
-  if (existingRetryableId) {
-    const { data: updated, error: updateErr } = await supabase
-      .from("userbase_instagram_posts")
-      .update({
-        user_id: moderatorUserId,
-        ig_media_type: mediaType,
-        caption,
-        image_url: imageUrl || null,
-        video_url: videoUrl || null,
-        status: "queued",
-        error: null,
-        ig_container_id: null,
-        ig_media_id: null,
-        ig_permalink: null,
-        published_at: null,
-      })
-      .eq("id", existingRetryableId)
-      .select("id")
-      .single();
-    if (updateErr || !updated) {
-      return NextResponse.json(
-        { error: updateErr?.message || "Failed to re-queue cross-post." },
-        { status: 500 }
-      );
-    }
-    queuedId = updated.id as string;
-  } else {
-    const { data: queued, error: insertErr } = await supabase
-      .from("userbase_instagram_posts")
-      .insert({
-        user_id: moderatorUserId,
-        hive_author: hiveAuthor,
-        hive_permlink: hivePermlink,
-        ig_media_type: mediaType,
-        caption,
-        image_url: imageUrl || null,
-        video_url: videoUrl || null,
-        status: "queued",
-      })
-      .select("id")
-      .single();
-    if (insertErr || !queued) {
-      return NextResponse.json(
-        { error: insertErr?.message || "Failed to record cross-post." },
-        { status: 500 }
-      );
-    }
-    queuedId = queued.id as string;
-  }
-
   // Invite the original author (mapped skater) as an IG collaborator so the
-  // cross-post also lands on their own feed (they get an invite to accept).
-  // Meta rejects some valid-looking usernames as "User not visible" when the
-  // account is private, blocked, too new, or not eligible for Collab. That
-  // should not block SkateHive from posting the clip, so retry without the
-  // optional collaborator invite on collaborator-specific failures.
-  const collaborators: string[] | undefined = Array.isArray(body?.collaborators)
+  // cross-post also lands on their own feed once published.
+  const collaborators: string[] = Array.isArray(body?.collaborators)
     ? body.collaborators.filter((c: unknown): c is string => typeof c === "string")
     : igHandle
     ? [igHandle]
-    : undefined;
-  const carouselItems = mediaItems.map((m) =>
-    m.type === "video" ? { videoUrl: m.url } : { imageUrl: m.url }
-  );
-  // Single publish helper so the collaborator-retry doesn't duplicate the
-  // image / reel / carousel branching.
-  const doPublish = (collab: string[] | undefined) =>
-    isCarousel
-      ? publishCarouselToInstagram({ items: carouselItems, caption, collaborators: collab })
-      : videoUrl
-      ? publishReelToInstagram({ videoUrl, caption, coverUrl: imageUrl || undefined, collaborators: collab })
-      : publishImageToInstagram({ imageUrl, caption, collaborators: collab });
+    : [];
 
-  let publishResult = await doPublish(collaborators);
-  let collaboratorRetryError: string | null = null;
-  // Retry without the collaborator invite when it's the likely culprit. For a
-  // CAROUSEL the `collaborators` param is undocumented and Meta may reject it
-  // with a generic "Invalid parameter" that isCollaboratorVisibilityError
-  // won't match — so for carousels we retry on ANY failure when collaborators
-  // were sent. (Image/Reel keep the targeted visibility-error check.)
-  if (
-    !publishResult.success &&
-    collaborators &&
-    collaborators.length > 0 &&
-    (isCarousel || isCollaboratorVisibilityError(publishResult.error))
-  ) {
-    collaboratorRetryError = publishResult.error;
-    publishResult = await doPublish(undefined);
+  // File it for review, exactly like a self-serve request. The payload is the
+  // finished publish input; the portal posts this without re-deriving anything.
+  const payload: InstagramQueuePayload = {
+    caption,
+    collaborators,
+    image_url: imageUrl || null,
+    video_url: videoUrl || null,
+    ...(isCarousel ? { media_items: mediaItems } : {}),
+    ig_media_type: mediaType,
+    permalink_url: permalinkUrl,
+    title,
+    tags,
+    // Distinguishes this from the author's own request, both for the curator
+    // and for anyone reading the row later.
+    ...(moderatorHandle ? { forced_by: moderatorHandle } : {}),
+  };
+
+  // The row is filed under the AUTHOR, not the moderator: user_id is who gets
+  // the outcome notification, and "your cross-post is live" belongs to the
+  // person whose clip it is. The moderator is kept in requested_by_handle and
+  // payload.forced_by. Falls back to the moderator when the author has no
+  // userbase account — better an audit trail with no notification than a row
+  // with no owner at all.
+  const authorUserIdForRow = authorUserId ?? moderatorUserId;
+
+  const enqueued = await enqueueCrossPost({
+    supabase,
+    target: "instagram",
+    userId: authorUserIdForRow,
+    requestedByHandle: moderatorHandle,
+    hiveAuthor,
+    hivePermlink,
+    payload,
+  });
+
+  if (!enqueued.ok) {
+    return NextResponse.json({ error: enqueued.error }, { status: enqueued.status });
   }
 
-  if (!publishResult.success) {
-    const error = collaboratorRetryError
-      ? `${publishResult.error} (also retried without collaborator after: ${collaboratorRetryError})`
-      : publishResult.error;
-    await supabase
-      .from("userbase_instagram_posts")
-      .update({ status: "failed", error })
-      .eq("id", queuedId);
-    return NextResponse.json({ error }, { status: 502 });
+  if (enqueued.duplicate) {
+    return NextResponse.json({
+      success: true,
+      queued: true,
+      already_queued: true,
+      queue_id: enqueued.id,
+      status: enqueued.duplicate.status,
+      forced_by: moderatorHandle,
+    });
   }
 
-  await supabase
-    .from("userbase_instagram_posts")
-    .update({
-      status: "published",
-      ig_container_id: publishResult.containerId,
-      ig_media_id: publishResult.mediaId,
-      ig_permalink: publishResult.permalink || null,
-      published_at: new Date().toISOString(),
-    })
-    .eq("id", queuedId);
-
-  if (publishResult.skipped && publishResult.skipped.length) {
-    console.warn("[ig-force-post] carousel items skipped:", publishResult.skipped);
+  // Tell the author their clip is up for review. Only when they actually have
+  // an account — notifying the moderator about their own action would be noise.
+  if (authorUserId) {
+    await notifyCrossPostQueued({
+      supabase,
+      userId: authorUserId,
+      queueId: enqueued.id,
+      target: "instagram",
+      hivePermlink,
+      permalinkUrl,
+    });
   }
 
   return NextResponse.json({
     success: true,
-    ig_media_id: publishResult.mediaId,
-    ig_permalink: publishResult.permalink || null,
+    queued: true,
+    queue_id: enqueued.id,
+    status: "pending_review",
     forced_by: moderatorHandle,
-    // Items Meta rejected (e.g. unsupported aspect ratio) that we dropped so the
-    // rest of the carousel could still post.
-    ...(publishResult.skipped && publishResult.skipped.length
-      ? { skipped: publishResult.skipped }
-      : {}),
   });
 }

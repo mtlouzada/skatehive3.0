@@ -7,9 +7,10 @@
  *                          curation team rather than publishing (see
  *                          lib/crosspost/queue.ts). The dialog says "send for
  *                          review", not "post".
- *   - mode="moderator" : an admin force-posting any snap       → /api/instagram/force-post
- *                        (publishes immediately — the curation team IS the
- *                         approval step, so it doesn't queue behind itself)
+ *   - mode="moderator" : an admin submitting ANY snap          → /api/instagram/force-post
+ *                        Also queues. The override is skipping the author's
+ *                        HP gate and caps, not skipping review — everything
+ *                        that reaches @skatehive goes past a curator.
  *
  * It first fetches a server-built preview (default caption + resolved IG
  * handle + media), then lets the user EDIT before publishing:
@@ -394,7 +395,7 @@ export default function InstagramCrossPostDialog({
     <SkateModal
       isOpen={isOpen}
       onClose={isPosting ? () => {} : onClose}
-      title={mode === "moderator" ? "instagram-force-post" : "instagram-cross-post"}
+      title={mode === "moderator" ? "instagram-crosspost · moderator" : "instagram-cross-post"}
       size="lg"
       footer={
         <HStack spacing={3} justify="flex-end" w="full">
